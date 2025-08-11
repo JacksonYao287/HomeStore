@@ -366,7 +366,7 @@ public:
     /// @return Expected to return blk_alloc_hints for this write. If the hints are not available, then return the
     /// error. It is to be noted this method should return error only in very abnornal cases as in some code flow, an
     /// error would result in a crash or stall of the entire commit thread.
-    virtual ReplResult< blk_alloc_hints > get_blk_alloc_hints(sisl::blob const& header, uint32_t data_size,
+    virtual ReplResult< blk_alloc_hints > get_blk_alloc_hints(sisl::blob& header, uint32_t data_size,
                                                               cintrusive< homestore::repl_req_ctx >& hs_ctx) = 0;
 
     /// @brief Called when the repl_dev is being destroyed. The consumer is expected to clean up any related resources.

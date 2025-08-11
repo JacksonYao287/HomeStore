@@ -1539,10 +1539,8 @@ void RaftReplDev::handle_error(repl_req_ptr_t const& rreq, ReplServiceError err)
     // HS_DBG_ASSERT(!(rreq->state.load() & uint32_cast(repl_req_state_t::LOG_FLUSHED)),
     //               "Unexpected state, received error after log is flushed for rreq=[{}]", rreq->to_string());
 
-    if (rreq->is_proposer()) {
-        // Notify the proposer about the error
-        m_listener->on_error(err, rreq->header(), rreq->key(), rreq);
-    }
+    m_listener->on_error(err, rreq->header(), rreq->key(), rreq);
+
     rreq->clear();
 }
 
@@ -1957,6 +1955,11 @@ nuraft::cb_func::ReturnCode RaftReplDev::raft_event(nuraft::cb_func::Type type, 
             // applier_create_req will return same req as previous one
             auto req = m_state_machine->localize_journal_entry_prepare(*entry, lsn);
             if (req == nullptr) {
+                // we need handle this error, since we need free the resource which allocated by this req.
+                for (auto const& rreq : *reqs) {
+                    handle_error(rreq, ReplServiceError::FAILED);
+                }
+
                 sisl::VectorPool< repl_req_ptr_t >::free(reqs);
                 // The hint set here will be used by the next after next appendEntry, the next one
                 // always go with -1 from NuRraft code.
