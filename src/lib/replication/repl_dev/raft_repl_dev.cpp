@@ -1273,7 +1273,7 @@ void RaftReplDev::on_fetch_data_received(intrusive< sisl::GenericRpcData >& rpc_
             fetch_req->request()->entries()->size());
 
     std::vector< sisl::sg_list > sgs_vec;
-    std::vector< folly::Future< bool > > futs;
+    std::vector< folly::Future< std::error_code > > futs;
     sgs_vec.reserve(fetch_req->request()->entries()->size());
     futs.reserve(fetch_req->request()->entries()->size());
 
@@ -1309,12 +1309,21 @@ void RaftReplDev::on_fetch_data_received(intrusive< sisl::GenericRpcData >& rpc_
     folly::collectAllUnsafe(futs).thenValue(
         [this, rpc_data = std::move(rpc_data), sgs_vec = std::move(sgs_vec)](auto&& vf) {
             for (auto const& err_c : vf) {
-                if (sisl_unlikely(err_c.value())) {
-                    COUNTER_INCREMENT(m_metrics, read_err_cnt, 1);
-                    RD_REL_ASSERT(false, "Error in reading data");
-                    // TODO: Find a way to return error to the Listener
-                    // TODO: actually will never arrive here as iomgr will assert
-                    // (should not assert but to raise alert and leave the raft group);
+                const auto& err = err_c.value();
+                if (err) {
+                    // if read data failed, we should ignore the rpc_data and let the follower retry the fetch
+                    RD_LOGD(NO_TRACE_ID,
+                            "Data Channel: Error happens when fetching data. value={}, category={}, err_message={}, "
+                            "ignoring this call",
+                            err.value(), err.category().name(), err.message());
+
+                    for (auto const& sgs : sgs_vec) {
+                        for (auto const& iov : sgs.iovs) {
+                            iomanager.iobuf_free(reinterpret_cast< uint8_t* >(iov.iov_base));
+                        }
+                    }
+                    rpc_data->send_response();
+                    return;
                 }
             }
 
@@ -1345,10 +1354,12 @@ void RaftReplDev::handle_fetch_data_response(sisl::GenericClientResponse respons
     auto raw_data = resp_blob.cbytes();
     auto total_size = resp_blob.size();
 
-    COUNTER_INCREMENT(m_metrics, fetch_total_blk_size, total_size);
+    if (!total_size || !raw_data) {
+        RD_LOGW(NO_TRACE_ID, "Empty response from remote!");
+        return;
+    }
 
-    RD_DBG_ASSERT_GT(total_size, 0, "Empty response from remote");
-    RD_DBG_ASSERT(raw_data, "Empty response from remote");
+    COUNTER_INCREMENT(m_metrics, fetch_total_blk_size, total_size);
 
     RD_LOGD(NO_TRACE_ID, "Data Channel: FetchData completed for {} requests", rreqs.size());
 
