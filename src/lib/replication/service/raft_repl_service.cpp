@@ -587,6 +587,7 @@ void RaftReplService::start_reaper_thread() {
             // Check for queued fetches at the minimum every second
             uint64_t interval_ns =
                 std::min(HS_DYNAMIC_CONFIG(consensus.wait_data_write_timer_ms) * 1000 * 1000, 1ul * 1000 * 1000 * 1000);
+            LOGINFOMOD(replication, "Reaper Thread: scheduling fetch data every {} ms", interval_ns / (1000 * 1000));
             m_rdev_fetch_timer_hdl = iomanager.schedule_thread_timer(interval_ns, true /* recurring */, nullptr,
                                                                      [this](void*) { fetch_pending_data(); });
 
