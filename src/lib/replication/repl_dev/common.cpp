@@ -23,7 +23,12 @@ ReplServiceError repl_req_ctx::init(repl_key rkey, journal_type_t op_code, bool 
 #endif
     m_op_code = op_code;
     m_is_proposer = is_proposer;
-    m_header = user_header;
+
+    // do a deep copy here, otherwise if the input user_header is freed after the call is returned, then m_header will
+    // become a dangling blob(the pointer in it is a dangling pointer).
+    m_header.buf_alloc(user_header.size());
+    std::memcpy(m_header.bytes(), user_header.cbytes(), user_header.size());
+
     m_key = key;
     m_is_jentry_localize_pending = (!is_proposer && (data_size > 0)); // Pending on the applier and with linked data
 
@@ -120,8 +125,9 @@ void repl_req_ctx::change_raft_journal_buf(raft_buf_ptr_t new_buf, bool adjust_h
     m_journal_entry = r_cast< repl_journal_entry* >(raft_journal_buf()->data_begin());
 
     if (adjust_hdr_key) {
-        m_header =
-            sisl::blob{uintptr_cast(m_journal_entry) + sizeof(repl_journal_entry), m_journal_entry->user_header_size};
+        m_header.buf_alloc(m_journal_entry->user_header_size);
+        std::memcpy(m_header.bytes(), uintptr_cast(m_journal_entry) + sizeof(repl_journal_entry),
+                    m_journal_entry->user_header_size);
         m_key =
             sisl::blob{uintptr_cast(m_journal_entry) + sizeof(repl_journal_entry) + m_journal_entry->user_header_size,
                        m_journal_entry->key_size};
@@ -226,7 +232,7 @@ bool repl_req_ctx::add_state_if_not_already(repl_req_state_t s) {
 }
 
 void repl_req_ctx::clear() {
-    m_header = sisl::blob{};
+    m_header = sisl::io_blob_safe{};
     m_key = sisl::blob{};
     m_pkts.clear();
 }

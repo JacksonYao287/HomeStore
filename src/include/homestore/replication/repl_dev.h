@@ -132,7 +132,7 @@ public:
     journal_type_t op_code() const { return m_op_code; }
     bool is_volatile() const { return m_is_volatile.load(); }
 
-    sisl::blob const& header() const { return m_header; }
+    sisl::io_blob_safe const& header() const { return m_header; }
     sisl::blob const& key() const { return m_key; }
     MultiBlkId const& local_blkid() const {
         // Currently used by raft repl dev only where a single blob is expected.
@@ -234,7 +234,7 @@ public:
 
 private:
     repl_key m_rkey;                                           // Unique key for the request
-    sisl::blob m_header;                                       // User header
+    sisl::io_blob_safe m_header;                               // User header
     sisl::blob m_key;                                          // User supplied key for this req
     int64_t m_lsn{-1};                                         // Lsn for this replication req
     bool m_is_proposer{false};                                 // Is the repl_req proposed by this node
