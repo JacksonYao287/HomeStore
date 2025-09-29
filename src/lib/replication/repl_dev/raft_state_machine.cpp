@@ -86,6 +86,8 @@ repl_req_ptr_t RaftStateMachine::localize_journal_entry_prepare(nuraft::log_entr
     repl_req_ptr_t rreq;
     if ((jentry->code == journal_type_t::HS_DATA_LINKED) && (jentry->value_size > 0)) {
         MultiBlkId entry_blkid;
+        // FIXME:: here we assume that there is only one MultiBlkId in the log. We need to handle multiple MultiBlkId
+        // case.!!!
         entry_blkid.deserialize(entry_to_val(jentry), true /* copy */);
 
         rreq =
@@ -133,7 +135,7 @@ out:
     return rreq;
 }
 
-repl_req_ptr_t RaftStateMachine::localize_journal_entry_finish(nuraft::log_entry& lentry, bool is_append_log) {
+repl_req_ptr_t RaftStateMachine::localize_journal_entry_finish(nuraft::log_entry& lentry) {
     // Try to locate the rreq based on the log_entry.
     // If we are able to locate that req in the map for this entry, it could be one of
     //  a) This is an inline data and don't need any localization
@@ -165,10 +167,11 @@ repl_req_ptr_t RaftStateMachine::localize_journal_entry_finish(nuraft::log_entry
 
     auto rreq = m_rd.repl_key_to_req(rkey);
 
-    if (is_append_log) {
-        // make sure the rreq exists before appending the log, both leader and follower
-        RELEASE_ASSERT(rreq, "Failed to find in-memory rreq for repl_key={} before appending log", rkey.to_string());
-    }
+    // localize_journal_entry_finish is called in both logstore#append(new log) and logstore#write_at(overwrite existing
+    // in rollback case). they are both from raft log channel and go through raft_repl_dev#raft_event, where rreq will
+    // be created if not exists. so,  before calling append or write_at, we need make sure the rreq exists , both leader
+    // and follower
+    RELEASE_ASSERT(rreq, "Failed to find in-memory rreq for repl_key={} before appending log", rkey.to_string());
 
     if ((rreq == nullptr) || (rreq->is_localize_pending())) {
         rreq = localize_journal_entry_prepare(lentry,

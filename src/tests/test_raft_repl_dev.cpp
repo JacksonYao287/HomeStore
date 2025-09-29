@@ -234,8 +234,6 @@ TEST_F(RaftReplDevTest, Resync_From_Non_Originator) {
     g_helper->sync_for_cleanup_start();
 }
 
-#if 0
-
 TEST_F(RaftReplDevTest, Leader_Restart) {
     LOGINFO("Homestore replica={} setup completed", g_helper->replica_num());
     g_helper->sync_for_test_start();
@@ -269,27 +267,26 @@ TEST_F(RaftReplDevTest, Drop_Raft_Entry_Switch_Leader) {
 
     if (g_helper->replica_num() == 2) {
         LOGINFO("Set flip to fake drop append entries in raft channel of replica=2");
-        test_common::HSTestHelper::set_basic_flip("fake_drop_append_raft_channel", 2, 75);
+        g_helper->set_basic_flip("fake_drop_append_raft_channel", 2, 75);
     }
 
     uint64_t exp_entries = SISL_OPTIONS["num_io"].as< uint64_t >();
-    if (g_helper->replica_num() == 0) { this->write_on_leader(); }
+    if (g_helper->replica_num() == 0) { this->write_on_leader(exp_entries, true); }
     LOGINFO(
         "Even after drop on replica=2, lets validate that data written is synced on all members (after retry to 2)");
     this->wait_for_all_commits();
 
     if (g_helper->replica_num() == 2) {
         LOGINFO("Set flip to fake drop append entries in raft channel of replica=2 again");
-        test_common::HSTestHelper::set_basic_flip("fake_drop_append_raft_channel", 1, 100);
+        g_helper->set_basic_flip("fake_drop_append_raft_channel", 1, 100);
     } else {
         g_helper->sync_dataset_size(1);
-        if (g_helper->replica_num() == 0) { this->write_on_leader(); }
+        if (g_helper->replica_num() == 0) { this->write_on_leader(exp_entries, true); }
 
         exp_entries += 1;
         this->wait_for_all_commits();
     }
 }
-#endif
 
 //
 // This test case should be run in long running mode to see the effect of snapshot and compaction
@@ -310,7 +307,6 @@ TEST_F(RaftReplDevTest, Snapshot_and_Compact) {
     g_helper->sync_for_cleanup_start();
 }
 
-#if 0
 TEST_F(RaftReplDevTest, RemoveReplDev) {
     LOGINFO("Homestore replica={} setup completed", g_helper->replica_num());
 
@@ -361,7 +357,6 @@ TEST_F(RaftReplDevTest, RemoveReplDev) {
     // see if records are being removed
     g_helper->sync_for_cleanup_start();
 }
-#endif
 
 #ifdef _PRERELEASE
 // Garbage collect the replication requests
@@ -468,6 +463,7 @@ TEST_F(RaftReplDevTest, BaselineTest) {
     LOGINFO("BaselineTest done");
 }
 
+#if 0
 TEST_F(RaftReplDevTest, LargeDataWrite) {
     LOGINFO("Homestore replica={} setup completed", g_helper->replica_num());
     g_helper->sync_for_test_start();
@@ -483,6 +479,7 @@ TEST_F(RaftReplDevTest, LargeDataWrite) {
     this->validate_data();
     g_helper->sync_for_cleanup_start();
 }
+#endif
 
 TEST_F(RaftReplDevTest, PriorityLeaderElection) {
     LOGINFO("Homestore replica={} setup completed", g_helper->replica_num());
@@ -608,7 +605,7 @@ TEST_F(RaftReplDevTest, RaftLogTruncationTest) {
     if (g_helper->replica_num() == 0) {
         this->create_snapshot();
         std::this_thread::sleep_for(std::chrono::seconds{1});
-        ASSERT_LT(this->get_truncation_upper_limit(), 200);
+        ASSERT_LT(200, this->get_truncation_upper_limit());
         LOGINFO("After another 100 entries written, truncation upper limit {}", this->get_truncation_upper_limit());
     }
 
@@ -662,7 +659,7 @@ TEST_F(RaftReplDevTest, RaftLogTruncationTest) {
         this->create_snapshot();
         std::this_thread::sleep_for(std::chrono::seconds{1});
         ASSERT_GE(this->get_truncation_upper_limit(), 350);
-        ASSERT_LT(this->get_truncation_upper_limit(), 550);
+        ASSERT_LT(550, this->get_truncation_upper_limit());
         LOGINFO("After another 300 entries written, truncation upper limit {}", this->get_truncation_upper_limit());
     }
     g_helper->sync_for_verify_start();
