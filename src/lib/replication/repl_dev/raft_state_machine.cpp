@@ -122,7 +122,7 @@ repl_req_ptr_t RaftStateMachine::localize_journal_entry_prepare(nuraft::log_entr
     // We might have localized the journal entry with new blkid. We need to also update the header/key pointers pointing
     // to the data in the raft journal entry. It is possible that header/key pointers are pointing to the data ptrs that
     // was created during push/fetch data. The following step ensures that all information are localized
-    rreq->change_raft_journal_buf(lentry.get_buf_ptr(), true /* adjust_hdr_key */);
+    rreq->change_raft_journal_buf(lentry.get_buf_ptr());
 
 out:
     if (rreq == nullptr) {

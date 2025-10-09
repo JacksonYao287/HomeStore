@@ -72,7 +72,8 @@ struct repl_key {
 
     bool operator==(repl_key const& other) const = default;
     std::string to_string() const {
-        return fmt::format("server={}, term={}, dsn={}, hash={}", server_id, term, dsn, Hasher()(*this));
+        return fmt::format("server={}, term={}, dsn={}, hash={}, trace_id={}", server_id, term, dsn, Hasher()(*this),
+                           traceID);
     }
 };
 
@@ -133,7 +134,7 @@ public:
     bool is_volatile() const { return m_is_volatile.load(); }
 
     sisl::io_blob_safe const& header() const { return m_header; }
-    sisl::blob const& key() const { return m_key; }
+    sisl::io_blob_safe const& key() const { return m_key; }
     MultiBlkId const& local_blkid() const {
         // Currently used by raft repl dev only where a single blob is expected.
         // Code checks if its a valid blkid so return a dummy blkid.
@@ -187,8 +188,7 @@ public:
     /// @brief Change the journal entry buffer to new_buf and adjust the header and key if adjust_hdr_key is true. It is
     /// expected that the original buffer is already created as raft buffer type.
     /// @param new_buf New raft buffer to be used
-    /// @param adjust_hdr_key If the header, key of this request has to be adjusted to the new buffer
-    void change_raft_journal_buf(raft_buf_ptr_t new_buf, bool adjust_hdr_key);
+    void change_raft_journal_buf(raft_buf_ptr_t new_buf);
 
     /// @brief Save the data that was pushed by the remote node for this request. When a push data rpc is called with
     /// the data, this method is called to save them to the request and make it shareable. This method makes a copy of
@@ -235,7 +235,7 @@ public:
 private:
     repl_key m_rkey;                                           // Unique key for the request
     sisl::io_blob_safe m_header;                               // User header
-    sisl::blob m_key;                                          // User supplied key for this req
+    sisl::io_blob_safe m_key;                                  // User supplied key for this req
     int64_t m_lsn{-1};                                         // Lsn for this replication req
     bool m_is_proposer{false};                                 // Is the repl_req proposed by this node
     Clock::time_point m_start_time;                            // Start time of the request

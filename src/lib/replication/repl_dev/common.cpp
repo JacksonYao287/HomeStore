@@ -13,6 +13,8 @@ namespace homestore {
 ReplServiceError repl_req_ctx::init(repl_key rkey, journal_type_t op_code, bool is_proposer,
                                     sisl::blob const& user_header, sisl::blob const& key, uint32_t data_size,
                                     cshared< ReplDevListener >& listener) {
+    std::unique_lock< std::mutex > lg(m_state_mtx);
+
     m_rkey = std::move(rkey);
 #ifndef NDEBUG
     if (data_size > 0) {
@@ -23,18 +25,30 @@ ReplServiceError repl_req_ctx::init(repl_key rkey, journal_type_t op_code, bool 
 #endif
     m_op_code = op_code;
     m_is_proposer = is_proposer;
+    m_is_jentry_localize_pending = (!is_proposer && (data_size > 0)); // Pending on the applier and with linked data
 
     // do a deep copy here, otherwise if the input user_header is freed after the call is returned, then m_header will
     // become a dangling blob(the pointer in it is a dangling pointer).
-    m_header.buf_alloc(user_header.size());
-    std::memcpy(m_header.bytes(), user_header.cbytes(), user_header.size());
 
-    m_key = key;
-    m_is_jentry_localize_pending = (!is_proposer && (data_size > 0)); // Pending on the applier and with linked data
+    // header and key should be empty when init is called.
+    // if not, when we call buf_alloc again for a io_blob_safe, it will cause memory leak.
+    // TODO： make some changes in sisl side to make sure the current buffer is freed when buf_alloc is called again.
+    RELEASE_ASSERT(!m_header.cbytes(), "m_header is already set, should not init again");
+    RELEASE_ASSERT(!m_key.cbytes(), "m_key is already set, should not init again");
+
+    if (user_header.size()) {
+        m_header.buf_alloc(user_header.size(), 0);
+        std::memcpy(m_header.bytes(), user_header.cbytes(), user_header.size());
+    }
+
+    if (key.size()) {
+        m_key.buf_alloc(key.size(), 0);
+        std::memcpy(m_key.bytes(), key.cbytes(), key.size());
+    }
 
     // We need to allocate the block if the req has data linked, since entry doesn't exist or if it exist, two
     // threads(data channel and raft channel) are trying to do the same thing. So take state mutex and allocate the blk
-    std::unique_lock< std::mutex > lg(m_state_mtx);
+
     if (has_linked_data() && !has_state(repl_req_state_t::BLK_ALLOCATED)) {
         ReplServiceError alloc_status;
 #ifdef _PRERELEASE
@@ -120,18 +134,9 @@ uint32_t repl_req_ctx::blkids_serialized_size() const {
     return blkids_serialized_size;
 }
 
-void repl_req_ctx::change_raft_journal_buf(raft_buf_ptr_t new_buf, bool adjust_hdr_key) {
+void repl_req_ctx::change_raft_journal_buf(raft_buf_ptr_t new_buf) {
     m_journal_buf = std::move(new_buf);
     m_journal_entry = r_cast< repl_journal_entry* >(raft_journal_buf()->data_begin());
-
-    if (adjust_hdr_key) {
-        m_header.buf_alloc(m_journal_entry->user_header_size);
-        std::memcpy(m_header.bytes(), uintptr_cast(m_journal_entry) + sizeof(repl_journal_entry),
-                    m_journal_entry->user_header_size);
-        m_key =
-            sisl::blob{uintptr_cast(m_journal_entry) + sizeof(repl_journal_entry) + m_journal_entry->user_header_size,
-                       m_journal_entry->key_size};
-    }
     m_is_jentry_localize_pending = false;
 }
 
@@ -233,7 +238,7 @@ bool repl_req_ctx::add_state_if_not_already(repl_req_state_t s) {
 
 void repl_req_ctx::clear() {
     m_header = sisl::io_blob_safe{};
-    m_key = sisl::blob{};
+    m_key = sisl::io_blob_safe{};
     m_pkts.clear();
 }
 

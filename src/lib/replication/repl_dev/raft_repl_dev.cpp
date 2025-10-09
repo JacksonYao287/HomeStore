@@ -262,7 +262,7 @@ AsyncReplResult<> RaftReplDev::start_replace_member(std::string& task_id, const 
         return make_async_error<>(ReplServiceError::CANCELLED);
     }
 
-    auto rreq = it->second;
+    auto& rreq = it->second;
     auto err = init_req_ctx(rreq, rkey, journal_type_t::HS_CTRL_START_REPLACE, true /* is_proposer */, header,
                             sisl::blob{}, 0, m_listener);
 
@@ -392,7 +392,7 @@ AsyncReplResult<> RaftReplDev::complete_replace_member(std::string& task_id, con
         return make_async_error<>(ReplServiceError::CANCELLED);
     }
 
-    auto rreq = it->second;
+    auto& rreq = it->second;
     auto err = init_req_ctx(rreq, rkey, journal_type_t::HS_CTRL_COMPLETE_REPLACE, true /* is_proposer */, header,
                             sisl::blob{}, 0, m_listener);
 
@@ -714,7 +714,7 @@ folly::SemiFuture< ReplServiceError > RaftReplDev::destroy_group() {
         return folly::makeSemiFuture< ReplServiceError >(ReplServiceError::CANCELLED);
     }
 
-    auto rreq = it->second;
+    auto& rreq = it->second;
     auto err = init_req_ctx(rreq, rkey, journal_type_t::HS_CTRL_DESTROY, true /* is_proposer */, sisl::blob{},
                             sisl::blob{}, 0, m_listener);
 
@@ -783,7 +783,7 @@ void RaftReplDev::propose_truncate_boundary() {
             return;
         }
 
-        auto rreq = it->second;
+        auto& rreq = it->second;
         auto status = init_req_ctx(rreq, rkey, journal_type_t::HS_CTRL_UPDATE_TRUNCATION_BOUNDARY,
                                    true /* is_proposer */, header, sisl::blob{}, 0, m_listener);
 
@@ -832,7 +832,7 @@ void RaftReplDev::async_alloc_write(sisl::blob const& header, sisl::blob const& 
         return;
     }
 
-    auto rreq = it->second;
+    auto& rreq = it->second;
     auto err = init_req_ctx(rreq, rkey, data.size ? journal_type_t::HS_DATA_LINKED : journal_type_t::HS_DATA_INLINED,
                             true /* is_proposer */, header, key, data.size, m_listener);
 
@@ -1052,7 +1052,7 @@ repl_req_ptr_t RaftReplDev::applier_create_req(repl_key const& rkey, journal_typ
 
     auto const [it, happened] = m_repl_key_req_map.try_emplace(rkey, repl_req_ptr_t(new repl_req_ctx()));
     RD_DBG_ASSERT((it != m_repl_key_req_map.end()), "Unexpected error in map_repl_key_to_req");
-    auto rreq = it->second;
+    auto& rreq = it->second;
 
     if (!happened) {
         // We already have the entry in the map, reset its start time to prevent it from being incorrectly gc during
@@ -2386,7 +2386,7 @@ void RaftReplDev::on_log_found(logstore_seq_num_t lsn, log_buffer buf, void* ctx
 
     auto const [it, happened] = m_repl_key_req_map.try_emplace(rkey, repl_req_ptr_t(new repl_req_ctx()));
     RD_DBG_ASSERT((it != m_repl_key_req_map.end()), "Unexpected error in map_repl_key_to_req");
-    auto rreq = it->second;
+    auto& rreq = it->second;
     RD_DBG_ASSERT(happened, "rreq already exists for rkey={}", rkey.to_string());
     uint32_t data_size{0u};
 
